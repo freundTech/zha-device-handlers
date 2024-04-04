@@ -85,6 +85,39 @@ def test_ikea_starkvind_v2(assert_signature_matches_quirk):
     assert_signature_matches_quirk(zhaquirks.ikea.starkvind.IkeaSTARKVIND_v2, signature)
 
 
+@pytest.mark.parametrize("attribute", ("fan_speed", "fan_mode"))
+async def test_fan_speed_mode_read(zigpy_device_from_quirk, attribute):
+    """Test reading the fan speed and mode."""
+
+    starkvind_device = zigpy_device_from_quirk(zhaquirks.ikea.starkvind.IkeaSTARKVIND)
+    assert starkvind_device.model == "STARKVIND Air purifier"
+
+    ikea_cluster = starkvind_device.endpoints[1].in_clusters[
+        zhaquirks.ikea.starkvind.IkeaAirpurifier.cluster_id
+    ]
+
+    # Mock the read attribute to on the IkeaAirpurifier cluster
+    # to always return 30 for anything.
+    def mock_read(attributes, manufacturer=None):
+        records = [
+            foundation.ReadAttributeRecord(
+                attr, foundation.Status.SUCCESS, foundation.TypeValue(None, 6)
+            )
+            for attr in attributes
+        ]
+        return (records,)
+
+    patch_ikeacluster_read = mock.patch.object(
+        ikea_cluster, "_read_attributes", mock.AsyncMock(side_effect=mock_read)
+    )
+    with patch_ikeacluster_read:
+        # Reading "fan_speed" should read the scaled down value
+        success, fail = await ikea_cluster.read_attributes([attribute])
+        assert success
+        assert 6 in success.values()
+        assert not fail
+
+
 async def test_pm25_cluster_read(zigpy_device_from_quirk):
     """Test reading from PM25 cluster."""
 
